@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DBR and DLR with DCE</title>
+    <script src="https://cdn.jsdelivr.net/npm/dynamsoft-javascript-barcode@9.0.1/dist/dbr.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dynamsoft-label-recognizer@2.2.4/dist/dlr.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dynamsoft-camera-enhancer@2.3.2/dist/dce.js"></script>
+</head>
+
+<body>
+    <script>
+        (async() => {
+            let lastThreeBarcodeResults = [];
+            const reader = await Dynamsoft.DBR.BarcodeReader.createInstance();
+            reader.onImageRead = (results) => {
+                if (results.length > 0)
+                    for (let i = 0; i < results.length; i++) {
+                        lastThreeBarcodeResults.push({
+                            txt: results[i].barcodeText,
+                            confidence: results[i].localizationResult.confidence
+                        });
+                    }
+                if (lastThreeBarcodeResults.length > 3)
+                    lastThreeBarcodeResults.splice(0, lastThreeBarcodeResults.length - 3);
+            };
+            //reader.onUniqueRead = txt => alert(`reader uniqueRead: ${txt}`);
+
+            const recognizer = await Dynamsoft.DLR.LabelRecognizer.createInstance();
+            recognizer.onImageRead = (results) => {
+                if (results.length == 0) return;
+                let allResults = [];
+                for (let i = 0; i < results.length; i++) {
+                    allResults = allResults.concat(results[i].lineResults);
+                }
+                for (let i = 0; i < allResults.length; i++) {
+                    let text2 = (allResults[i].text).toLowerCase();
+                    let confidence2 = allResults[i].confidence;
+                    for (let i = 0; i < lastThreeBarcodeResults.length; i++) {
+                        let text1 = (lastThreeBarcodeResults[i].txt).toLowerCase();;
+                        let confidence1 = lastThreeBarcodeResults[i].confidence;
+                        if (similarity(text1, text2) > 0.8 || text1.indexOf(text2) != -1 || text2.indexOf(text1) != -1) {
+                            console.log(`Result from DBR: ${text1}(${confidence1})`);
+                            console.log(`Result from DLR: ${text2}(${confidence2})`);
+                        }
+                    }
+                }
+            };
+            //recognizer.onUniqueRead = txt => alert(`recognizer uniqueRead: ${txt}`);
+
+            const cameraEnhancer = await Dynamsoft.DCE.CameraEnhancer.createInstance();
+            reader.setImageSource(cameraEnhancer);
+            recognizer.setImageSource(cameraEnhancer);
+            //recognizer.updateRuntimeSettingsFromString("video-vin");
+            await recognizer.startScanning(true);
+            await reader.startScanning(true);
+        })();
+
+        // Based on Levenshtein distance https://en.wikipedia.org/wiki/Levenshtein_distance
+        // Refer to https://stackoverflow.com/questions/10473745/compare-strings-javascript-return-of-likely
+        function similarity(s1, s2) {
+            var longer = s1;
+            var shorter = s2;
+            if (s1.length < s2.length) {
+                longer = s2;
+                shorter = s1;
+            }
+            var longerLength = longer.length;
+            if (longerLength == 0) {
+                return 1.0;
+            }
+            return (longerLength - editDistance(longer, shorter)) / parseFloat(longerLength);
+        }
+
+        function editDistance(s1, s2) {
+            s1 = s1.toLowerCase();
+            s2 = s2.toLowerCase();
+
+            var costs = new Array();
+            for (var i = 0; i <= s1.length; i++) {
+                var lastValue = i;
+                for (var j = 0; j <= s2.length; j++) {
+                    if (i == 0)
+                        costs[j] = j;
+                    else {
+                        if (j > 0) {
+                            var newValue = costs[j - 1];
+                            if (s1.charAt(i - 1) != s2.charAt(j - 1))
+                                newValue = Math.min(Math.min(newValue, lastValue),
+                                    costs[j]) + 1;
+                            costs[j - 1] = lastValue;
+                            lastValue = newValue;
+                        }
+                    }
+                }
+                if (i > 0)
+                    costs[s2.length] = lastValue;
+            }
+            return costs[s2.length];
+        }
+    </script>
+</body>
+
+</html>
